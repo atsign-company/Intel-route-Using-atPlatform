@@ -7,12 +7,13 @@
 // settings_store.dart.
 import 'dart:convert';
 
+import 'city_profile.dart';
 import 'traffic_report.dart';
 
 class SensorSettings {
   final IntersectionConfig config;
 
-  /// Which entry of [kRoutePresets] the location came from, so the picker can
+  /// Which entry of [CityProfile.reportPresets] the location came from, so the picker can
   /// restore the same selection (the coordinates live in [config]).
   final String preset;
 
@@ -26,11 +27,23 @@ class SensorSettings {
 
   const SensorSettings({
     this.config = const IntersectionConfig(),
-    this.preset = 'berkeley-oakland-i880 (midpoint — proven)',
+    this.preset = '',
     this.intervalSeconds = 5,
     this.gateOnly = true,
     this.minConfidence = 0.30,
   });
+
+  /// First-run settings for a city: report from its first preset location (a
+  /// report point, else an intersection), so no geography is baked into the app.
+  factory SensorSettings.forProfile(CityProfile profile) {
+    final presets = profile.reportPresets;
+    if (presets.isEmpty) return const SensorSettings();
+    final first = presets.entries.first;
+    return SensorSettings(
+      config: IntersectionConfig(latitude: first.value[0], longitude: first.value[1]),
+      preset: first.key,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'plannerAtSign': config.plannerAtSign,
@@ -47,10 +60,11 @@ class SensorSettings {
 
   String encode() => jsonEncode(toJson());
 
-  /// Rebuild from stored JSON. Anything missing or malformed falls back to the
-  /// default for that field rather than losing the whole configuration.
-  static SensorSettings fromJson(Map<String, dynamic> json) {
-    const fallback = SensorSettings();
+  /// Rebuild from stored JSON. Anything missing or malformed falls back to that
+  /// field of [fallback] (normally [SensorSettings.forProfile]) rather than losing
+  /// the whole configuration.
+  static SensorSettings fromJson(Map<String, dynamic> json,
+      {SensorSettings fallback = const SensorSettings()}) {
     T pick<T>(String key, T defaultValue) {
       final value = json[key];
       return value is T ? value : defaultValue;
@@ -83,15 +97,16 @@ class SensorSettings {
     );
   }
 
-  /// Decode stored text; returns defaults if it is absent or unreadable.
-  static SensorSettings decode(String? text) {
-    if (text == null || text.trim().isEmpty) return const SensorSettings();
+  /// Decode stored text; returns [fallback] if it is absent or unreadable.
+  static SensorSettings decode(String? text,
+      {SensorSettings fallback = const SensorSettings()}) {
+    if (text == null || text.trim().isEmpty) return fallback;
     try {
       final decoded = jsonDecode(text);
-      if (decoded is! Map<String, dynamic>) return const SensorSettings();
-      return fromJson(decoded);
+      if (decoded is! Map<String, dynamic>) return fallback;
+      return fromJson(decoded, fallback: fallback);
     } catch (_) {
-      return const SensorSettings();
+      return fallback;
     }
   }
 }

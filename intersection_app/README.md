@@ -42,9 +42,11 @@ by its owner — nothing is shared and nothing is stored in the clear.
 Two settings matter, both under the **tune** icon:
 
 1. **Location** — the planner only reacts to congestion at a **trackpoint of the route
-   it is currently planning**. Leave this on the default
-   `berkeley-oakland-i880 (midpoint — proven)` preset; a report anywhere else is
-   delivered and then ignored.
+   it is currently planning**. The presets come from `assets/city_profile.json` (its
+   `report_points`, then its `intersections`); with the bundled Bay Area profile, leave
+   this on the default `berkeley-oakland-i880 (midpoint — proven)` preset. A report
+   anywhere else is delivered and then ignored. For another city, replace the asset with
+   that city's profile (see "Running in another city" in the top-level README).
 2. **Density per detected car** (default 15, slider up to 50) — the planner reroutes
    above a density of **10**, so one recognised car already reports 15 (two report 30,
    the density the proven CLI demo sends). Raise it to make a single car dominate.

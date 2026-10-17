@@ -11,13 +11,17 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 
 import 'car_counter.dart';
+import 'city_profile.dart';
 import 'sensor_settings.dart';
 import 'settings_store.dart';
 import 'vehicle_detector.dart';
 import 'traffic_report.dart';
 
 class SensorPage extends StatefulWidget {
-  const SensorPage({super.key});
+  /// The city this sensor is in: where its report locations come from.
+  final CityProfile profile;
+
+  const SensorPage({super.key, required this.profile});
   @override
   State<SensorPage> createState() => _SensorPageState();
 }
@@ -34,8 +38,8 @@ class _SensorPageState extends State<SensorPage> {
   late final SettingsStore _settingsStore;
   late final String _me;
 
-  IntersectionConfig _config = const IntersectionConfig();
-  String _preset = kRoutePresets.keys.first;
+  late IntersectionConfig _config;
+  late String _preset;
 
   bool _reporting = false;
   int _intervalSeconds = 5;
@@ -57,6 +61,9 @@ class _SensorPageState extends State<SensorPage> {
     final atClient = AtClientManager.getInstance().atClient;
     _reporter = TrafficReporter(atClient);
     _settingsStore = SettingsStore(atClient);
+    final defaults = SensorSettings.forProfile(widget.profile);
+    _config = defaults.config;
+    _preset = defaults.preset;
     _me = atClient.getCurrentAtSign() ?? '(unknown)';
     _restoreThenStart();
   }
@@ -64,7 +71,7 @@ class _SensorPageState extends State<SensorPage> {
   /// Settings are restored BEFORE reporting arms, so the first report never goes to a
   /// default planner atSign that the operator already corrected on a previous run.
   Future<void> _restoreThenStart() async {
-    final saved = await _settingsStore.load();
+    final saved = await _settingsStore.load(SensorSettings.forProfile(widget.profile));
     if (mounted) {
       setState(() {
         _config = saved.config;
@@ -396,6 +403,7 @@ class _SensorPageState extends State<SensorPage> {
       builder: (_) => _SettingsSheet(
         config: _config,
         preset: _preset,
+        presets: widget.profile.reportPresets,
         intervalSeconds: _intervalSeconds,
         counter: _counter,
         gateOnly: _gateOnly,
@@ -418,6 +426,7 @@ class _SensorPageState extends State<SensorPage> {
 class _SettingsSheet extends StatefulWidget {
   final IntersectionConfig config;
   final String preset;
+  final Map<String, List<double>> presets;
   final int intervalSeconds;
   final CarCounter counter;
   final bool gateOnly;
@@ -426,6 +435,7 @@ class _SettingsSheet extends StatefulWidget {
   const _SettingsSheet({
     required this.config,
     required this.preset,
+    required this.presets,
     required this.intervalSeconds,
     required this.counter,
     required this.gateOnly,
@@ -439,7 +449,9 @@ class _SettingsSheet extends StatefulWidget {
 class _SettingsSheetState extends State<_SettingsSheet> {
   late TextEditingController _planner;
   late TextEditingController _name;
-  late String _preset;
+  /// Null when the saved location is not one of this city's presets (e.g. it was
+  /// saved under another profile): the coordinates are then kept as they are.
+  String? _preset;
   late int _perCar;
   late int _interval;
   late double _minConfidence;
@@ -450,7 +462,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     super.initState();
     _planner = TextEditingController(text: widget.config.plannerAtSign);
     _name = TextEditingController(text: widget.config.intersectionName);
-    _preset = widget.preset;
+    _preset = widget.presets.containsKey(widget.preset) ? widget.preset : null;
     _perCar = widget.config.densityPerCar;
     _interval = widget.intervalSeconds;
     _minConfidence = widget.counter.minConfidence;
@@ -500,7 +512,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
               initialValue: _preset,
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'Location (must be on the route)'),
-              items: kRoutePresets.keys
+              items: widget.presets.keys
                   .map((k) => DropdownMenuItem(value: k, child: Text(k, overflow: TextOverflow.ellipsis)))
                   .toList(),
               onChanged: (v) => setState(() => _preset = v ?? _preset),
@@ -558,7 +570,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                 const SizedBox(width: 8),
                 FilledButton(
                   onPressed: () {
-                    final coords = kRoutePresets[_preset]!;
+                    final coords = widget.presets[_preset];
                     widget.counter
                       ..minConfidence = _minConfidence
                       ..reset();
@@ -566,11 +578,11 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                       widget.config.copyWith(
                         plannerAtSign: _planner.text.trim(),
                         intersectionName: _name.text.trim(),
-                        latitude: coords[0],
-                        longitude: coords[1],
+                        latitude: coords?[0],
+                        longitude: coords?[1],
                         densityPerCar: _perCar,
                       ),
-                      _preset,
+                      _preset ?? widget.preset,
                       _interval,
                       _gateOnly,
                     );

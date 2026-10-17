@@ -10,11 +10,14 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_auth/at_auth.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path_provider/path_provider.dart';
+
+import 'city_profile.dart';
 
 const String kNamespace = 'smartroute';
 const String kPlannerAtSign = '@smartroute_planner'; // EE: @alpha
@@ -25,17 +28,26 @@ final Map<String, AtRootDomain> kRootDomains = {
   'vip.ve.atsign.zone:64 (test env)': const AtRootDomain('vip.ve.atsign.zone', 64),
 };
 
-void main() => runApp(const CommuterApp());
+/// The city profile asset: trip locations, default trip and map view. Replace
+/// assets/city_profile.json to run in another city.
+const String kCityProfileAsset = 'assets/city_profile.json';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final profile = CityProfile.parse(await rootBundle.loadString(kCityProfileAsset));
+  runApp(CommuterApp(profile: profile));
+}
 
 class CommuterApp extends StatelessWidget {
-  const CommuterApp({super.key});
+  final CityProfile profile;
+  const CommuterApp({super.key, required this.profile});
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Smart Route — Commuter',
       theme: ThemeData(colorSchemeSeed: Colors.green, useMaterial3: true),
-      home: const AuthScreen(),
+      home: AuthScreen(profile: profile),
     );
   }
 }
@@ -43,7 +55,8 @@ class CommuterApp extends StatelessWidget {
 /// Sign-in screen — pick an atSign AND the root server (production or test env),
 /// then authenticate from the device keychain or a `.atKeys` file.
 class AuthScreen extends StatelessWidget {
-  const AuthScreen({super.key});
+  final CityProfile profile;
+  const AuthScreen({super.key, required this.profile});
 
   Future<void> _afterAuth(BuildContext context, AtAuthRequest req, AuthResponse resp) async {
     final dir = await getApplicationSupportDirectory();
@@ -58,7 +71,7 @@ class AuthScreen extends StatelessWidget {
       enrollmentId: resp.enrollmentId, atChops: resp.atChops, atLookUp: resp.atLookUp,
     );
     if (context.mounted) {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomePage()));
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomePage(profile: profile)));
     }
   }
 
@@ -126,15 +139,16 @@ class AuthScreen extends StatelessWidget {
 
 /// Home — request a route, watch it update live with reroute alerts on a map.
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final CityProfile profile;
+  const HomePage({super.key, required this.profile});
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  final _locations = const ['Berkeley, California', 'Santa Clara, California'];
-  String _from = 'Berkeley, California';
-  String _to = 'Santa Clara, California';
+  late final List<String> _locations = widget.profile.locationLabels;
+  late String _from = widget.profile.tripSource;
+  late String _to = widget.profile.tripDestination;
 
   List<LatLng> _points = [];
   String _banner = 'Pick start & destination, then Find Route.';
@@ -162,8 +176,12 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _rerouted = d['rerouted'] == true;
       final tag = _rerouted ? '🚨 Rerouted' : '🧭 Route';
+      final name = d['route_name'] as String;
+      final label = d['route_label'] is String && (d['route_label'] as String).isNotEmpty
+          ? d['route_label'] as String
+          : widget.profile.routeLabel(name);
       _banner =
-          '$tag: ${d['route_name']} (${(d['distance_km'] as num).toStringAsFixed(1)} km) — ${d['reason']}';
+          '$tag: $label (${(d['distance_km'] as num).toStringAsFixed(1)} km) — ${d['reason']}';
       _points = [
         for (final p in (d['points'] as List))
           LatLng((p[0] as num).toDouble(), (p[1] as num).toDouble())
@@ -187,7 +205,9 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final center =
-        _points.isNotEmpty ? _points[_points.length ~/ 2] : const LatLng(37.7, -122.2);
+        _points.isNotEmpty
+            ? _points[_points.length ~/ 2]
+            : LatLng(widget.profile.centreLat, widget.profile.centreLon);
     return Scaffold(
       appBar: AppBar(title: const Text('Smart Route — Commuter')),
       body: Column(
@@ -213,7 +233,7 @@ class _HomePageState extends State<HomePage> {
           ),
           Expanded(
             child: FlutterMap(
-              options: MapOptions(initialCenter: center, initialZoom: 9),
+              options: MapOptions(initialCenter: center, initialZoom: widget.profile.zoom.toDouble()),
               children: [
                 TileLayer(
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -230,6 +250,12 @@ class _HomePageState extends State<HomePage> {
                         child: const Icon(Icons.trip_origin, color: Colors.blue)),
                     Marker(point: _points.last, child: const Icon(Icons.place, color: Colors.red)),
                   ]),
+                SimpleAttributionWidget(
+                  source: Text([
+                    'OpenStreetMap contributors',
+                    if (widget.profile.attribution.isNotEmpty) widget.profile.attribution,
+                  ].join(' · ')),
+                ),
               ],
             ),
           ),

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "name": "San Francisco Bay Area",
+  "locations": [
+    { "name": "Berkeley", "desc": "Berkeley, California", "lat": 37.8715, "lon": -122.273 },
+    { "name": "Santa Clara", "desc": "Santa Clara, California", "lat": 37.3541, "lon": -121.9552 }
+  ],
+  "default_trip": {
+    "source": "Berkeley, California",
+    "destination": "Santa Clara, California"
+  },
+  "ignored_routes": [
+    "berkeley-eastpaloalto.gpx",
+    "berkeley-sanbruno-sunnyvale.gpx"
+  ],
+  "route_labels": {
+    "berkeley-oakland-i880.gpx": "Oakland and I-880",
+    "berkeley-dublin-sanjose.gpx": "Dublin and San Jose",
+    "berkeley-sanbruno.gpx": "San Bruno",
+    "berkeley-sanbruno-sunnyvale.gpx": "San Bruno and Sunnyvale",
+    "berkeley-eastpaloalto.gpx": "East Palo Alto"
+  },
+  "map": {
+    "centre": { "lat": 37.7, "lon": -122.2 },
+    "zoom": 9
+  },
+  "intersections": {
+    "intxn_market_st": { "name": "Market St & 1st", "lat": 37.7946, "lon": -122.3999 },
+    "intxn_5th_ave": { "name": "5th Ave & Mission", "lat": 37.7825, "lon": -122.4079 },
+    "intxn_broadway": { "name": "Broadway & Columbus", "lat": 37.798, "lon": -122.407 }
+  },
+  "report_points": [
+    { "name": "berkeley-oakland-i880 (midpoint — proven)", "lat": 37.54812, "lon": -122.0241 }
+  ],
+  "avg_speed_kmh": 80,
+  "attribution": "Routes: Intel Smart Route Planning Agent sample data (Apache-2.0)."
+}

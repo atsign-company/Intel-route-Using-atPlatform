@@ -10,8 +10,10 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
 
+import 'city_profile.dart';
 import 'sensor_page.dart';
 
 const String kNamespace = 'smartroute';
@@ -22,17 +24,26 @@ final Map<String, AtRootDomain> kRootDomains = {
   'vip.ve.atsign.zone:64 (test env)': const AtRootDomain('vip.ve.atsign.zone', 64),
 };
 
-void main() => runApp(const IntersectionApp());
+/// The city profile asset: the geography (report locations) this sensor offers.
+/// Replace assets/city_profile.json to run in another city.
+const String kCityProfileAsset = 'assets/city_profile.json';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final profile = CityProfile.parse(await rootBundle.loadString(kCityProfileAsset));
+  runApp(IntersectionApp(profile: profile));
+}
 
 class IntersectionApp extends StatelessWidget {
-  const IntersectionApp({super.key});
+  final CityProfile profile;
+  const IntersectionApp({super.key, required this.profile});
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Smart Route — Intersection',
       theme: ThemeData(colorSchemeSeed: Colors.teal, useMaterial3: true),
-      home: const AuthScreen(),
+      home: AuthScreen(profile: profile),
     );
   }
 }
@@ -40,7 +51,8 @@ class IntersectionApp extends StatelessWidget {
 /// Sign-in — pick the intersection's atSign AND the root server, then
 /// authenticate from the device keychain or a `.atKeys` file.
 class AuthScreen extends StatelessWidget {
-  const AuthScreen({super.key});
+  final CityProfile profile;
+  const AuthScreen({super.key, required this.profile});
 
   Future<void> _afterAuth(BuildContext context, AtAuthRequest req, AuthResponse resp) async {
     final dir = await getApplicationSupportDirectory();
@@ -55,7 +67,7 @@ class AuthScreen extends StatelessWidget {
       enrollmentId: resp.enrollmentId, atChops: resp.atChops, atLookUp: resp.atLookUp,
     );
     if (context.mounted) {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SensorPage()));
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => SensorPage(profile: profile)));
     }
   }
 

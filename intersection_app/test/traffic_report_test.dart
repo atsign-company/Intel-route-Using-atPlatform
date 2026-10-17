@@ -5,17 +5,23 @@
 // end-to-end against the planner. If these drift, the phone's reports would be
 // delivered but not understood.
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intersection_app/car_counter.dart';
+import 'package:intersection_app/city_profile.dart';
 import 'package:intersection_app/vehicle_detector.dart';
 import 'package:intersection_app/sensor_settings.dart';
 import 'package:intersection_app/traffic_report.dart';
 
 void main() {
   final reporter = TrafficReporter(_NullAtClient());
-  const config = IntersectionConfig(plannerAtSign: '@alpha');
+  // The shipped asset is the Bay Area profile; its first report point is the
+  // trackpoint the CLI demo proved (berkeley-oakland-i880 midpoint).
+  final profile = CityProfile.parse(File('assets/city_profile.json').readAsStringSync());
+  final config =
+      SensorSettings.forProfile(profile).config.copyWith(plannerAtSign: '@alpha');
 
   group('payload contract', () {
     test('matches the fields the planner (Intel LiveTrafficData) parses', () {
@@ -145,6 +151,52 @@ void main() {
       expect(settings.config.plannerAtSign, '@alpha');
       expect(settings.config.densityPerCar, const IntersectionConfig().densityPerCar);
       expect(settings.gateOnly, isTrue);
+    });
+
+    test('missing fields default from the city profile, not from code', () {
+      final fallback = SensorSettings.forProfile(profile);
+      for (final stored in [null, 'not json', '{"plannerAtSign":"@alpha"}']) {
+        final settings = SensorSettings.decode(stored, fallback: fallback);
+        expect(settings.config.latitude, fallback.config.latitude);
+        expect(settings.config.longitude, fallback.config.longitude);
+        expect(settings.preset, fallback.preset);
+      }
+    });
+  });
+
+  group('city profile', () {
+    test('the shipped asset reproduces the original Bay Area presets, in order', () {
+      expect(profile.reportPresets, {
+        'berkeley-oakland-i880 (midpoint — proven)': [37.54812, -122.0241],
+        'Market St & 1st': [37.7946, -122.3999],
+        '5th Ave & Mission': [37.7825, -122.4079],
+        'Broadway & Columbus': [37.798, -122.407],
+      });
+      final first = SensorSettings.forProfile(profile);
+      expect(first.preset, 'berkeley-oakland-i880 (midpoint — proven)');
+      expect([first.config.latitude, first.config.longitude], [37.54812, -122.0241]);
+    });
+
+    test('another city needs only another profile', () {
+      final other = CityProfile.parse(jsonEncode({
+        'locations': [
+          {'name': 'Alpha', 'desc': 'Alpha Town', 'lat': 10.0, 'lon': 20.0},
+          {'name': 'Beta', 'lat': 10.0, 'lon': 20.1},
+        ],
+        'intersections': {
+          'intxn_main': {'name': 'Main St', 'lat': 10.002, 'lon': 20.05},
+        },
+      }));
+      expect(other.locationLabels, ['Alpha Town', 'Beta']);
+      expect([other.tripSource, other.tripDestination], ['Alpha Town', 'Beta']);
+      expect([other.centreLat, other.centreLon, other.zoom], [10.0, closeTo(20.05, 1e-9), 10]);
+      final settings = SensorSettings.forProfile(other);
+      expect(settings.preset, 'Main St');
+      expect([settings.config.latitude, settings.config.longitude], [10.002, 20.05]);
+    });
+
+    test('a profile without locations is rejected', () {
+      expect(() => CityProfile.parse('{"locations": []}'), throwsFormatException);
     });
   });
 
