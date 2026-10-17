@@ -13,6 +13,7 @@ import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_cli_commons/at_cli_commons.dart';
+import 'package:interop_dart/city_profile_file.dart';
 
 /// Locate config/ee_atsigns.json robustly whether run via `dart run` or as a
 /// compiled binary from anywhere. Order: --config, ATSIGN_CONFIG env, cwd, then
@@ -41,8 +42,11 @@ Future<void> main(List<String> args) async {
   final parser = CLIBase.createArgsParser(namespace: 'smartroute')
     ..addOption('to', help: 'planner atSign (default: planner for ATSIGN_PROFILE from config)')
     ..addOption('config', help: 'path to ee_atsigns.json (default: ATSIGN_CONFIG env or auto-locate)')
-    ..addOption('lat', defaultsTo: '37.54812', help: 'incident latitude (a trackpoint on the shortest route)')
-    ..addOption('lon', defaultsTo: '-122.0241', help: 'incident longitude')
+    ..addOption('profile',
+        help: r"city_profile.json (default: $SMARTROUTE_DATA_DIR/city_profile.json, else the planner's bundled one)")
+    ..addOption('lat',
+        help: 'incident latitude, a trackpoint on the shortest route (default: the city profile\'s first report location)')
+    ..addOption('lon', help: 'incident longitude (default: as --lat)')
     ..addOption('density', defaultsTo: '30', help: 'vehicle density: >10 reroutes, <=10 clears')
     ..addOption('name', defaultsTo: 'Incident (Dart)', help: 'intersection name (its own cache key)');
 
@@ -51,6 +55,21 @@ Future<void> main(List<String> args) async {
   final me = atClient.getCurrentAtSign()!;
   final a = parser.parse(args);
   final density = int.parse(a['density'] as String);
+
+  // Where: --lat/--lon, else the city profile's first report location.
+  var lat = a['lat'] as String?;
+  var lon = a['lon'] as String?;
+  if (lat == null || lon == null) {
+    final presets = loadCityProfile(a['profile'] as String?).reportPresets;
+    if (presets.isEmpty) {
+      stderr.writeln('[change_route] the city profile has no report_points or intersections; pass --lat and --lon');
+      exit(2);
+    }
+    final first = presets.entries.first;
+    lat ??= '${first.value[0]}';
+    lon ??= '${first.value[1]}';
+    stdout.writeln('[change_route] location from city profile: ${first.key}');
+  }
 
   // Default the planner atSign from config for the active profile ('ee' or 'vanity').
   final profile = Platform.environment['ATSIGN_PROFILE'] ?? 'ee';
@@ -68,8 +87,8 @@ Future<void> main(List<String> args) async {
 
   final payload = jsonEncode({
     'location_coordinates': {
-      'latitude': double.parse(a['lat'] as String),
-      'longitude': double.parse(a['lon'] as String),
+      'latitude': double.parse(lat),
+      'longitude': double.parse(lon),
     },
     'intersection_name': a['name'],
     'timestamp': DateTime.now().toIso8601String(),
@@ -79,7 +98,7 @@ Future<void> main(List<String> args) async {
     'incident_status': density > 12 ? 'crowding' : 'clear',
   });
 
-  stdout.writeln('[change_route] $me -> $to  density=$density at (${a['lat']}, ${a['lon']})');
+  stdout.writeln('[change_route] $me -> $to  density=$density at ($lat, $lon)');
   final res = await atClient.notificationService
       .notify(NotificationParams.forUpdate(key, value: payload));
   stdout.writeln('[change_route] status=${res.notificationStatusEnum}');
