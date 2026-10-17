@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "name": "Two Town (synthetic test city)",
+  "locations": [
+    { "name": "Alpha", "desc": "Alpha Town", "lat": 10.0, "lon": 20.0 },
+    { "name": "Beta", "desc": "Beta Town", "lat": 10.0, "lon": 20.1 },
+    { "name": "Gamma", "lat": 10.2, "lon": 20.2 }
+  ],
+  "default_trip": { "source": "Alpha Town", "destination": "Beta Town" },
+  "ignored_routes": ["twotown-closed.gpx"],
+  "route_labels": {
+    "twotown-direct.gpx": "Direct road",
+    "twotown-detour.gpx": "Northern detour"
+  },
+  "map": { "centre": { "lat": 10.01, "lon": 20.05 }, "zoom": 12 },
+  "intersections": {
+    "intxn_main": { "name": "Main St & Middle Rd", "lat": 10.002, "lon": 20.05 }
+  },
+  "report_points": [
+    { "name": "Direct road midpoint", "lat": 10.002, "lon": 20.05 }
+  ],
+  "avg_speed_kmh": 40,
+  "attribution": "Synthetic test data."
+}

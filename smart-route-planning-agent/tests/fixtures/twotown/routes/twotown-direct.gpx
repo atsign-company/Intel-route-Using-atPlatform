@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" version="1.1" creator="synthetic test fixture">
+  <wpt lat="10.0" lon="20.0">
+    <name>Alpha</name>
+    <desc>Alpha Town</desc>
+  </wpt>
+  <wpt lat="10.0" lon="20.1">
+    <name>Beta</name>
+    <desc>Beta Town</desc>
+  </wpt>
+  <trk>
+    <name>Alpha to Beta (direct)</name>
+    <trkseg>
+      <trkpt lat="10.00000" lon="20.00000"></trkpt>
+      <trkpt lat="10.00062" lon="20.01000"></trkpt>
+      <trkpt lat="10.00118" lon="20.02000"></trkpt>
+      <trkpt lat="10.00162" lon="20.03000"></trkpt>
+      <trkpt lat="10.00190" lon="20.04000"></trkpt>
+      <trkpt lat="10.00200" lon="20.05000"></trkpt>
+      <trkpt lat="10.00190" lon="20.06000"></trkpt>
+      <trkpt lat="10.00162" lon="20.07000"></trkpt>
+      <trkpt lat="10.00118" lon="20.08000"></trkpt>
+      <trkpt lat="10.00062" lon="20.09000"></trkpt>
+      <trkpt lat="10.00000" lon="20.10000"></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

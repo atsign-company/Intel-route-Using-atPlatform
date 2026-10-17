@@ -1,37 +1,24 @@
 #!/usr/bin/env python3
 """
-Test script to verify logging functionality in the route agent
+Test script to verify logging functionality in the route agent.
+
+Runs the whole LangGraph plan (direct -> static optimizers) on the synthetic
+Two Town data directory (tests/fixtures/twotown, selected in conftest.py).
 """
 
 import logging
-import os
-import sys
 
-# Add the src directory to the Python path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-
-from src.agents.route_planner import RoutePlanner
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("test_route_app.log"), logging.StreamHandler()],
-)
+from agents.route_planner import RoutePlanner
+from config import DEFAULT_TRIP
 
 
-def test_route_agent() -> None:
+def test_route_agent(caplog) -> None:
     """Test the route agent with logging"""
-    print("Testing route agent with logging...")
-
-    # Initialize the route planner
+    caplog.set_level(logging.INFO)
     planner = RoutePlanner()
 
-    # Test route planning using the plan_route method
-    route_state = planner.plan_route(
-        source="Berkeley, California",
-        destination="Santa Clara, California",
-    )
+    source, destination = DEFAULT_TRIP
+    route_state = planner.plan_route(source=source, destination=destination)
 
     print("\n" + "=" * 50)
     print("ROUTE INFO:")
@@ -40,6 +27,7 @@ def test_route_agent() -> None:
     print(f"Is Sub-Optimal: {route_state.get('is_sub_optimal', False)}")
     print("=" * 50)
 
-
-if __name__ == "__main__":
-    test_route_agent()
+    assert route_state["direct_route"]["route_name"] == "twotown-direct.gpx"
+    assert route_state["direct_route"]["distance"] > 0
+    assert f"Planning route from {source} to {destination}" in caplog.text
+    assert "Finding direct shortest route" in caplog.text
