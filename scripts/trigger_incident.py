@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """
 Inject a severe-congestion incident at a real trackpoint of the current shortest
-route (published by the Market St intersection atSign). The running planner service
+route (published by the intxn_market_st intersection atSign). The running planner service
 reroutes on its next cycle; the operator console + commuter app flip to 🚨 REROUTE.
 The incident self-clears when its record TTL (60s) expires.
 
@@ -16,7 +16,7 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "smart-route-planning-agent", "src"))
 
-from config import DEFAULT_LOCATIONS, IGNORED_ROUTES, GPX_DIR, WeatherStatus, IncidentStatus  # noqa: E402
+from config import DEFAULT_TRIP, IGNORED_ROUTES, GPX_DIR, WeatherStatus, IncidentStatus  # noqa: E402
 from schema import GeoCoordinates, LiveTrafficData  # noqa: E402
 from agents.route_planner import RoutePlanner  # noqa: E402
 from utils.gpx_parser import MapDataParser  # noqa: E402
@@ -25,7 +25,7 @@ from atsign.atsign_io import AtPublisher  # noqa: E402
 
 
 def main():
-    src, dst = DEFAULT_LOCATIONS[0], DEFAULT_LOCATIONS[-1]
+    src, dst = DEFAULT_TRIP
     rp = RoutePlanner()
     shortest, _ = rp._find_new_shortest_available_route(src, dst, list(IGNORED_ROUTES))
     tps = MapDataParser(GPX_DIR / shortest).get_route_data()["tracks"][0]["track_points"]
