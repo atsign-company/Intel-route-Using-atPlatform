@@ -7,6 +7,7 @@ from agents import RoutePlanner, RoutePlannerState
 from config import (
     DEFAULT_LOCATION_COORDINATES,
     DEFAULT_LOCATIONS,
+    DEFAULT_TRIP,
     GPX_DIR,
     MAP_COLORS,
     StaticOptimizerName,
@@ -37,8 +38,10 @@ class RouteService:
         self.alt_route_trackpoints: list[list] = []
         self.route_state: Optional[RoutePlannerState] = None
 
-        self.locations: List[str] = DEFAULT_LOCATIONS
-        self.location_coordinates: Dict[str, List[float]] = DEFAULT_LOCATION_COORDINATES
+        self.locations: List[str] = list(DEFAULT_LOCATIONS)
+        self.location_coordinates: Dict[str, List[float]] = dict(
+            DEFAULT_LOCATION_COORDINATES
+        )
 
     def _load_direct_shortest_route(
         self, source: str, destination: str
@@ -224,12 +227,7 @@ class RouteService:
 
     def get_default_locations(self) -> Tuple[str, str]:
         """Get default start and end locations"""
-        return (
-            self.locations[0] if len(self.locations) > 0 else "Berkeley, California",
-            self.locations[-1]
-            if len(self.locations) > 1
-            else "Santa Clara, California",
-        )
+        return DEFAULT_TRIP
 
     def create_direct_route_map(
         self, start_location: str, end_location: str

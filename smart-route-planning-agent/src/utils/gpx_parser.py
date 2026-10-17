@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import gpxpy
 
-from config import DEFAULT_LOCATION_COORDINATES
+from config import MAP_CENTRE, MAP_ZOOM
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -166,11 +166,8 @@ class MapDataParser:
         """
         bounds = self.get_route_bounds()
         if not bounds:
-            # Get Berkeley Coordinates and default to Berkeley with higher zoom
-            default_lat, default_lon = DEFAULT_LOCATION_COORDINATES[
-                "Berkeley, California"
-            ]
-            return default_lat, default_lon, 12
+            # No route to fit: open on the city profile's map centre
+            return MAP_CENTRE[0], MAP_CENTRE[1], MAP_ZOOM
 
         center_lat = (bounds["min_lat"] + bounds["max_lat"]) / 2
         center_lon = (bounds["min_lon"] + bounds["max_lon"]) / 2
