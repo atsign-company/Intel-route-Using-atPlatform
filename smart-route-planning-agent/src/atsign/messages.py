@@ -18,6 +18,7 @@ from utils.gpx_parser import MapDataParser
 
 class RoutePush(BaseModel):
     route_name: str
+    route_label: str = ""  # human-readable name from the city profile's route_labels
     distance_km: float
     reason: str
     rerouted: bool
@@ -26,6 +27,7 @@ class RoutePush(BaseModel):
 
 class StatusPush(BaseModel):
     optimal_route: str
+    route_label: str = ""  # human-readable name from the city profile's route_labels
     distance_km: float
     reason: str
     rerouted: bool

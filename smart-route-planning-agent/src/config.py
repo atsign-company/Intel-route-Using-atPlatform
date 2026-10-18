@@ -1,33 +1,86 @@
 # Copyright (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
+import os
 from enum import Enum
 from pathlib import Path
 
+import city_profile
+
 # Configs and Constants for the Route Planner Application
+#
+# Geography is data, not code. Everything city-specific comes from the data
+# directory: routes/*.gpx, csv/*.csv, config.json and city_profile.json. It
+# defaults to ./data next to this file (the San Francisco Bay Area profile the
+# project has always shipped); SMARTROUTE_DATA_DIR points it somewhere else.
 
-# Default locations and coordinates
-DEFAULT_LOCATIONS = [
-    "Berkeley, California",
-    "Santa Clara, California",
-]
+DATA_DIR: Path = Path(
+    os.environ.get("SMARTROUTE_DATA_DIR") or Path(__file__).parent / "data"
+).resolve()
 
-# Coordinates mapping for locations with default values for lats and long
-DEFAULT_LOCATION_COORDINATES = {
-    "Berkeley, California": [37.8715, -122.2730],
-    "Santa Clara, California": [37.3541, -121.9552],
-}
-
-# Directory where GPX files reside
-GPX_DIR: Path = Path(__file__).parent / "data" / "routes"
-IGNORED_ROUTES: list[str] = [
-    "berkeley-eastpaloalto.gpx",
-    "berkeley-sanbruno-sunnyvale.gpx",
-]
+# Directory where GPX files reside. A route's id is its file name.
+GPX_DIR: Path = DATA_DIR / "routes"
 
 # Directory where route status (Weather, traffic, etc. ) data is stored
-ROUTE_STATUS_DIR: Path = Path(__file__).parent / "data" / "csv"
-CONFIG_FILE: Path = Path(__file__).parent / "data" / "config.json"
+ROUTE_STATUS_DIR: Path = DATA_DIR / "csv"
+CONFIG_FILE: Path = DATA_DIR / "config.json"
+CITY_PROFILE_FILE: Path = DATA_DIR / "city_profile.json"
+
+CITY_PROFILE: dict = city_profile.load(CITY_PROFILE_FILE)
+
+# Every place a trip can start or end, by label: the GPX endpoint waypoint's
+# <desc>, or its <name> when it has no <desc>.
+DEFAULT_LOCATIONS: list[str] = [
+    city_profile.location_label(loc) for loc in CITY_PROFILE["locations"]
+]
+
+# Coordinates mapping for locations
+DEFAULT_LOCATION_COORDINATES: dict[str, list[float]] = {
+    city_profile.location_label(loc): [loc["lat"], loc["lon"]]
+    for loc in CITY_PROFILE["locations"]
+}
+
+# The trip planned until somebody asks for another one: (source, destination).
+DEFAULT_TRIP: tuple[str, str] = (
+    CITY_PROFILE["default_trip"]["source"],
+    CITY_PROFILE["default_trip"]["destination"],
+)
+
+# Routes (GPX file names) the planner never offers.
+IGNORED_ROUTES: list[str] = list(CITY_PROFILE["ignored_routes"])
+
+# Human-readable names for routes, keyed by GPX file name.
+ROUTE_LABELS: dict[str, str] = dict(CITY_PROFILE["route_labels"])
+
+# Where maps open when there is no route to fit them to.
+MAP_CENTRE: tuple[float, float] = (
+    CITY_PROFILE["map"]["centre"]["lat"],
+    CITY_PROFILE["map"]["centre"]["lon"],
+)
+MAP_ZOOM: int = CITY_PROFILE["map"]["zoom"]
+
+# Intersection publishers by atSign role: role -> (name, lat, lon).
+INTERSECTIONS: dict[str, tuple[str, float, float]] = {
+    role: (spec["name"], spec["lat"], spec["lon"])
+    for role, spec in CITY_PROFILE["intersections"].items()
+}
+
+# Average speed for travel-time estimates.
+AVG_SPEED_KMH: float = CITY_PROFILE["avg_speed_kmh"]
+
+# Credit for the route/map data (e.g. OpenStreetMap's ODbL notice).
+ATTRIBUTION: str = CITY_PROFILE["attribution"]
+
+
+def find_location(text: str) -> str | None:
+    """Label of the profile location named `text` (its <name> or <desc>), else None."""
+    loc = city_profile.find_location(CITY_PROFILE["locations"], text)
+    return city_profile.location_label(loc) if loc else None
+
+
+def route_label(route_name: str) -> str:
+    """Human-readable name for a route id (GPX file name); the id itself if unlabelled."""
+    return ROUTE_LABELS.get(route_name, route_name)
 
 
 class CongestionLevel(Enum):
@@ -71,15 +124,6 @@ ADVERSE_WEATHER_CONDITIONS = [
     WeatherStatus.FIRE,
     WeatherStatus.FLOOD,
 ]
-
-WEATHER_ISSUE_MAP: dict[str, WeatherStatus] = {
-    "berkeley-oakland-i880.gpx": WeatherStatus.FLOOD,
-    "berkeley-dublin-sanjose.gpx": WeatherStatus.FIRE,
-}
-
-INCIDENT_ISSUE_MAP: dict[str, IncidentStatus] = {
-    "berkeley-sanbruno.gpx": IncidentStatus.MAINTENANCE,
-}
 
 
 class StaticOptimizerName(Enum):

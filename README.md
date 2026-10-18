@@ -64,9 +64,9 @@ The **policy engine owns the rule set**, stored as encrypted records in its own 
 grant or revocation survives a restart of anything. The admin page states what the engine
 mirrors back to it, never its own assumption, and the planner enforces the last set it was
 given (default-deny until it has one).
-| `route` | planner → commuter | `RoutePush` (route, distance, reason, rerouted, points) |
+| `route` | planner → commuter | `RoutePush` (route, route label, distance, reason, rerouted, points) |
 | `status` | planner → operator | `StatusPush` (+ route geometry) |
-| `request` | commuter → planner | `{source, destination}` |
+| `request` | commuter → planner | `{source, destination}`: sets the planned trip when both are city-profile locations |
 
 The wire format **is** Intel's `schema.py` Pydantic models serialized to JSON — Python and
 Dart interoperate (verified in `validation/`).
@@ -146,6 +146,114 @@ cars and the planner reroutes. Its settings are stored as a **self key in the at
 keystore**, so they follow the identity rather than the device. See
 [intersection_app/README.md](intersection_app/README.md) for the density multiplier and
 on-route location presets that make a reroute fire.
+
+## Running in another city
+
+Nothing about the Bay Area is in the code: the planner, the publishers, the scripts and
+the apps take their geography from a **data directory** and the **city profile** inside it.
+The bundled `smart-route-planning-agent/src/data/` is the San Francisco Bay Area and stays
+the default; point `SMARTROUTE_DATA_DIR` at another directory to run somewhere else.
+
+### Data directory layout
+
+```text
+$SMARTROUTE_DATA_DIR/            # default: smart-route-planning-agent/src/data
+├── city_profile.json            # required: the geography (schema below)
+├── routes/*.gpx                 # required: one file per route; the file name is the route id
+├── csv/weather_report.csv       # conditions the feed publishers replay
+├── csv/traffic_trends.csv       #   (atsign.publishers.feed); header-only files are fine
+├── csv/planned_events.csv
+└── config.json                  # Intel's legacy REST host list; `{}` is fine
+```
+
+`config.py` reads the variable once, at import: set it in the environment of **every**
+Python process (planner service, publishers, scripts). A data directory without a
+`city_profile.json` is an error, never a silent fallback to the Bay Area. The Dart CLI tools
+read `$SMARTROUTE_DATA_DIR/city_profile.json` too (or `--profile <file>`). The Flutter
+apps carry a copy as `assets/city_profile.json`; replace it and rebuild.
+
+### City profile (`city_profile.json`)
+
+JSON Schema: [`smart-route-planning-agent/src/data/city_profile.schema.json`](smart-route-planning-agent/src/data/city_profile.schema.json);
+loader and validation: `smart-route-planning-agent/src/city_profile.py`.
+
+```jsonc
+{
+  "schema_version": 1,                       // optional; only 1 is accepted
+  "name": "Two Town",                        // optional display name
+  "locations": [                             // required, ≥ 2: where trips start and end
+    { "name": "Alpha", "desc": "Alpha Town", "lat": 10.0, "lon": 20.0 },
+    { "name": "Beta",  "desc": "Beta Town",  "lat": 10.0, "lon": 20.1 }
+  ],
+  "default_trip": { "source": "Alpha Town", "destination": "Beta Town" },
+                                             // optional; default first -> last location
+  "ignored_routes": ["twotown-closed.gpx"],  // optional; GPX file names never offered
+  "route_labels": { "twotown-direct.gpx": "Direct road" },   // optional; id -> label
+  "map": { "centre": { "lat": 10.01, "lon": 20.05 }, "zoom": 12 },
+                                             // optional; default mean of locations, zoom 10
+  "intersections": {                         // optional; keyed by atSign role
+    "intxn_main": { "name": "Main St & Middle Rd", "lat": 10.002, "lon": 20.05 }
+  },
+  "report_points": [                         // optional; extra known-good report spots
+    { "name": "Direct road midpoint", "lat": 10.002, "lon": 20.05 }
+  ],
+  "avg_speed_kmh": 40,                       // optional; travel-time estimate, default 80
+  "attribution": "Routes © OpenStreetMap contributors, ODbL."   // optional
+}
+```
+
+- **locations** mirror the first and last `<wpt>` of the GPX files. A location's *label*
+  (what trips, requests and dropdowns use) is its `desc`, else its `name`; a trip end
+  matches a route when it equals the waypoint's `<name>` or `<desc>` **exactly**
+  (case- and space-sensitive).
+- **default_trip** is what `scripts/planner_service.py` plans until a commuter asks for
+  another trip (`request` record): the request is honoured when both ends are profile
+  locations with a route between them, otherwise it is logged and ignored.
+- **intersections** are where `atsign.publishers.intersection --role <role>` reports from.
+  `--name/--lat/--lon` or `SMARTROUTE_INTERSECTION_NAME/_LAT/_LON` override them (and with
+  both coordinates a role need not be listed). The intersection app and
+  `dart_client/bin/change_route.dart` offer `report_points` then `intersections` as their
+  locations, the first being the default.
+- **map**, **avg_speed_kmh** and **attribution** drive the map fallbacks and the route
+  info box (Gradio UI) and the commuter app's opening view and credit line.
+
+### GPX requirements
+
+The planner's rules are simple and literal, so the data has to fit them:
+
+1. **Identical endpoint waypoints.** Every route between two places starts with the same
+   `<wpt>` (same `<name>`/`<desc>`) and ends with the same `<wpt>`; those are the
+   profile's `locations`. Routes are directional: Beta → Alpha needs its own GPX files.
+2. **The primary is strictly the shortest.** The direct route is the shortest offered
+   route by `gpxpy` `length_3d()`; alternatives are tried in increasing length. Avoid ties
+   (the winner of a tie is arbitrary). Put routes you keep but never want offered in
+   `ignored_routes`.
+3. **Intersections sit on the primary's track, exactly.** Live traffic matches a route
+   only at a coordinate *equal* to one of its `<trkpt>`s (or endpoint `<wpt>`s) — no
+   tolerance. Copy each intersection's `lat`/`lon` verbatim from a `<trkpt>` of the
+   primary route; a point that is off by 1e-6 is delivered and ignored. A point shared by
+   the alternative blocks it too. Only the first `<trk>` of a file is checked.
+4. **Conditions are matched by a box.** Feed records match a trackpoint within ±0.005°
+   (weather), ±0.0005° (traffic trends) or ±0.01° (planned events) in both latitude and
+   longitude. They feed the static optimizers of the Gradio flow, not the planner
+   service's realtime loop. The weather CSV `condition` must be a `WeatherStatus` value
+   (`fog`, `rain`, `snow`, `cloudy`, `sunny`, `Clear`, ...): anything else reads as Clear.
+5. **Credit the source.** Routes exported from OpenStreetMap (e.g. via OSRM/GraphHopper)
+   are © OpenStreetMap contributors under the ODbL: say so in `attribution`, which the
+   apps display beside the map.
+
+`smart-route-planning-agent/tests/fixtures/twotown/` is a complete, minimal example: two
+offered routes, one ignored route, one intersection on the primary.
+
+### Tests
+
+```bash
+cd smart-route-planning-agent/src && python -m pytest ../tests -q
+```
+
+The tests run against the Two Town fixture (they set `SMARTROUTE_DATA_DIR` in
+`tests/conftest.py`) and check, among other things, that the bundled profile still yields
+the Bay Area values the code used to hard-wire.
 
 ## Status
 

@@ -22,14 +22,14 @@ class SettingsStore {
     ..namespace = namespace
     ..sharedBy = atClient.getCurrentAtSign();
 
-  /// Load saved settings, or defaults when none are stored yet (first run, or a
+  /// Load saved settings, or [fallback] when none are stored yet (first run, or a
   /// fresh install whose sync has not caught up).
-  Future<SensorSettings> load() async {
+  Future<SensorSettings> load(SensorSettings fallback) async {
     try {
       final value = await atClient.get(_key());
-      return SensorSettings.decode(value.value as String?);
+      return SensorSettings.decode(value.value as String?, fallback: fallback);
     } catch (_) {
-      return const SensorSettings();
+      return fallback;
     }
   }
 

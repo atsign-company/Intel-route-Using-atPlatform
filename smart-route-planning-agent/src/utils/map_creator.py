@@ -1,13 +1,22 @@
 # Copyright (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
+import html
 import math
 import random
 from typing import Any, Dict, List, Optional, Tuple
 
 import folium
 
-from config import ADVERSE_WEATHER_CONDITIONS, MAP_COLORS, IncidentStatus
+from config import (
+    ADVERSE_WEATHER_CONDITIONS,
+    ATTRIBUTION,
+    AVG_SPEED_KMH,
+    MAP_CENTRE,
+    MAP_COLORS,
+    MAP_ZOOM,
+    IncidentStatus,
+)
 from schema import LiveTrafficData
 from utils.logging_config import get_logger
 
@@ -67,7 +76,7 @@ class MapCreator:
     ) -> Tuple[float, float, int]:
         """Calculate optimal center coordinates and zoom level for the map"""
         if not route_points:
-            return 37.8715, -122.2730, 8
+            return MAP_CENTRE[0], MAP_CENTRE[1], MAP_ZOOM
 
         # Calculate bounds
         lats = [point[0] for point in route_points]
@@ -386,7 +395,7 @@ class MapCreator:
         """Create HTML for route information box"""
         # Calculate distance and time
         distance_km = self.calculate_route_distance(route_points)
-        estimated_time = max(1, int(distance_km / 80))  # Assuming 80 km/h average speed
+        estimated_time = max(1, int(distance_km / AVG_SPEED_KMH))  # city profile avg_speed_kmh
 
         route_info_html = f"""
         <div style="
@@ -432,6 +441,13 @@ class MapCreator:
                     <div style="font-size: 12px; color: #666;">
                         Alt route points: {alt_route_info["points"]}
                     </div>
+                </div>
+            """
+
+        if ATTRIBUTION:
+            route_info_html += f"""
+                <div style="font-size: 10px; color: #999; margin-top: 8px;">
+                    {html.escape(ATTRIBUTION)}
                 </div>
             """
 

@@ -89,10 +89,14 @@ class RoutePlanner:
 
         logger.info("Finding direct shortest route ...")
         logger.debug(f"============= State of the state : {state} =============")
+        # Atsign migration: always exclude IGNORED_ROUTES. Intel passed them only as the
+        # .get() default, but LangGraph initialises the reducer-backed no_fly_list to [],
+        # so the default never applied and an ignored route that happened to be the
+        # shortest was chosen (invisible with the Bay Area data, where it never is).
         shortest_route, shortest_distance = self._find_new_shortest_available_route(
             state.get("source", ""),
             state.get("destination", ""),
-            state.get("no_fly_list", IGNORED_ROUTES),
+            [*IGNORED_ROUTES, *(state.get("no_fly_list") or [])],
         )
 
         # Update the direct_route dict with required information

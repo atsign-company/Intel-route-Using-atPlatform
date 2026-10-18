@@ -10,6 +10,9 @@ optimal route to the commuter and status to the operator. Trigger a reroute with
 `scripts/trigger_incident.py`. Unlike `planner_run.py`, this does NOT publish its
 own policy — it relies on the running policy engine, so it composes with the stack.
 
+A commuter changes the trip with a `request` record, {"source": ..., "destination": ...},
+honoured when both ends are locations in the city profile.
+
 Run:  python scripts/planner_service.py
 """
 import json
@@ -21,9 +24,10 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "smart-route-planning-agent", "src"))
 
-from config import DEFAULT_LOCATIONS, IGNORED_ROUTES  # noqa: E402
+from config import IGNORED_ROUTES, route_label  # noqa: E402
 from agents.route_planner import RoutePlanner  # noqa: E402
 from atsign import roles, wire, cache, messages  # noqa: E402
+from atsign.trip import Trip  # noqa: E402
 from atsign.atsign_io import AtPublisher, AtSubscriber  # noqa: E402
 
 POLICY = roles.atsign_for("policy")
@@ -34,9 +38,26 @@ _denied_seen: dict = {}  # source -> last-logged monotonic time (throttle denial
 # enforcing a rule set the engine no longer holds.
 POLICY_STALE_S = 90.0
 
+# The trip being planned: the city profile's default_trip until a commuter requests
+# another (both ends must be profile locations, else the request is ignored).
+TRIP = Trip()
+RP = None  # the RoutePlanner, set in main() before the subscriber starts
+
 
 def on_record(frm, key, value, raw):
     kn = wire.key_name_from_atkey(key)
+    if kn == "request":
+        # A commuter asking for a trip. Not a data feed, so not subject to the publisher
+        # policy; only commuter atSigns may change the trip.
+        if not roles.role_for_atsign(frm).startswith("commuter"):
+            print(f"[planner-service] ignored trip request from {frm} (not a commuter)", flush=True)
+        elif TRIP.request(value, has_route=_has_route):
+            src, dst = TRIP.get()
+            print(f"[planner-service] trip set by {frm}: {src} -> {dst}", flush=True)
+        else:
+            print(f"[planner-service] ignored trip request from {frm}: {value!r} "
+                  "(both ends must be city-profile locations joined by a route)", flush=True)
+        return
     if kn == "policy":
         if frm == POLICY:
             _policy_at[0] = time.monotonic()
@@ -77,24 +98,35 @@ def on_record(frm, key, value, raw):
         cache.put_condition(kn, frm, wire.decode(kn, value))
 
 
+def _has_route(src, dst):
+    return bool(RP and RP._find_new_shortest_available_route(src, dst, list(IGNORED_ROUTES))[0])
+
+
 def main():
+    global RP
     me = roles.atsign_for("planner")
+    RP = rp = RoutePlanner()
     threading.Thread(
         target=lambda: AtSubscriber(me, roles.namespace(), on_record).start(), daemon=True
     ).start()
     time.sleep(6)  # let the @alpha connection establish before opening a 2nd client (avoids a root-conn race)
     pub = AtPublisher(me)
-    rp = RoutePlanner()
-    src, dst = DEFAULT_LOCATIONS[0], DEFAULT_LOCATIONS[-1]
-    print(f"[planner-service] {me} running; planning every 8s, pushing to commuter+operator")
+    src, dst = TRIP.get()
+    print(f"[planner-service] {me} running; planning every 8s, pushing to commuter+operator; trip {src} -> {dst}")
     last = None
+    no_route_for = None
 
     while True:
         time.sleep(8)
         try:
+            src, dst = TRIP.get()
             shortest, dist = rp._find_new_shortest_available_route(src, dst, list(IGNORED_ROUTES))
             if not shortest:
+                if no_route_for != (src, dst):
+                    print(f"[planner-service] no route from {src} to {dst} in the data directory")
+                    no_route_for = (src, dst)
                 continue
+            no_route_for = None
             state = {
                 "source": src, "destination": dst,
                 "optimal_route": {"route_name": shortest, "distance": dist},
@@ -114,17 +146,19 @@ def main():
             )
             pts = messages.route_points(chosen)
             pub.notify(roles.atsign_for("commuter01"), "route", messages.RoutePush(
-                route_name=chosen, distance_km=cdist, reason=reason, rerouted=rerouted, points=pts,
+                route_name=chosen, route_label=route_label(chosen), distance_km=cdist, reason=reason,
+                rerouted=rerouted, points=pts,
             ).model_dump_json())
             pub.notify(roles.atsign_for("operator"), "status", messages.StatusPush(
-                optimal_route=chosen, distance_km=cdist, reason=reason, rerouted=rerouted,
+                optimal_route=chosen, route_label=route_label(chosen), distance_km=cdist, reason=reason,
+                rerouted=rerouted,
                 agent_status="Active - rerouted" if rerouted else "Active - monitoring",
                 intersections=[{"name": lt.get("intersection_name"), "density": lt.get("traffic_density")}] if lt else [],
                 points=pts,
             ).model_dump_json())
-            if chosen != last:
-                print(f"[planner-service] optimal={chosen} rerouted={rerouted} ({reason})")
-                last = chosen
+            if (src, dst, chosen) != last:
+                print(f"[planner-service] {src} -> {dst}: optimal={chosen} rerouted={rerouted} ({reason})")
+                last = (src, dst, chosen)
         except Exception as e:
             print(f"[planner-service] loop error: {e}")
 

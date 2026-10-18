@@ -24,7 +24,9 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "smart-route-planning-agent", "src"))
 
-from config import DEFAULT_LOCATIONS, IGNORED_ROUTES, GPX_DIR, WeatherStatus, IncidentStatus  # noqa: E402
+from config import (  # noqa: E402
+    DEFAULT_TRIP, IGNORED_ROUTES, INTERSECTIONS, GPX_DIR, WeatherStatus, IncidentStatus, route_label,
+)
 from schema import GeoCoordinates, LiveTrafficData  # noqa: E402
 from agents.route_planner import RoutePlanner  # noqa: E402
 from utils.gpx_parser import MapDataParser  # noqa: E402
@@ -88,7 +90,7 @@ def main():
         wait_for(lambda: ALLOW, "policy")
 
     # Find the current shortest route and a real trackpoint on it.
-    src, dst = DEFAULT_LOCATIONS[0], DEFAULT_LOCATIONS[-1]
+    src, dst = DEFAULT_TRIP
     rp = RoutePlanner()
     shortest, dist = rp._find_new_shortest_available_route(src, dst, list(IGNORED_ROUTES))
     print(f"\n[planner] shortest direct route: {shortest} ({dist:.1f} km)")
@@ -100,7 +102,7 @@ def main():
     # The intersection pushes a HIGH-density live record at that exact trackpoint.
     rec = LiveTrafficData(
         location_coordinates=GeoCoordinates(latitude=lat, longitude=lon),
-        intersection_name="Market St & 1st",
+        intersection_name=INTERSECTIONS.get("intxn_market_st", ("Incident (planner_run)",))[0],
         timestamp=time.strftime("%Y-%m-%dT%H:%M:%S"),
         traffic_density=30,  # > threshold (10)
         traffic_description="severe congestion (pushed)",
@@ -144,12 +146,13 @@ def main():
     # Phase 5: PUSH the chosen route to the commuter app and status to the operator console.
     planner_pub = AtPublisher(me)
     route_push = messages.RoutePush(
-        route_name=chosen, distance_km=chosen_dist, reason=reason,
+        route_name=chosen, route_label=route_label(chosen), distance_km=chosen_dist, reason=reason,
         rerouted=rerouted, points=messages.route_points(chosen),
     )
     planner_pub.notify(roles.atsign_for("commuter01"), "route", route_push.model_dump_json())
     status_push = messages.StatusPush(
-        optimal_route=chosen, distance_km=chosen_dist, reason=reason, rerouted=rerouted,
+        optimal_route=chosen, route_label=route_label(chosen), distance_km=chosen_dist,
+        reason=reason, rerouted=rerouted,
         agent_status="Active - rerouted" if rerouted else "Active - monitoring",
         intersections=[{"name": lt.get("intersection_name"), "density": lt.get("traffic_density")}] if lt else [],
         points=route_push.points,

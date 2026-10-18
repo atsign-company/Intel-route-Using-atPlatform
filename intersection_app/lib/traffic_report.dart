@@ -18,6 +18,8 @@ class IntersectionConfig {
 
   /// Must be ON the planner's current route for a reroute to occur — the planner
   /// only reacts to congestion at a trackpoint of the route it is considering.
+  /// There is no geographic default here: the app starts from the city profile's
+  /// first report location (see [SensorSettings.forProfile]).
   final double latitude;
   final double longitude;
 
@@ -35,8 +37,8 @@ class IntersectionConfig {
 
   const IntersectionConfig({
     this.intersectionName = 'Model intersection (phone)',
-    this.latitude = 37.54812,
-    this.longitude = -122.0241,
+    this.latitude = 0.0,
+    this.longitude = 0.0,
     this.plannerAtSign = '@smartroute_planner',
     this.densityPerCar = 15,
     this.ttlMillis = 60000,
@@ -60,15 +62,6 @@ class IntersectionConfig {
     );
   }
 }
-
-/// Known-good coordinates: trackpoints on routes the planner actually plans over.
-/// Reporting anywhere else is delivered but ignored (not on the optimal route).
-const Map<String, List<double>> kRoutePresets = {
-  'berkeley-oakland-i880 (midpoint — proven)': [37.54812, -122.0241],
-  'Market St & 1st': [37.7946, -122.3999],
-  '5th Ave & Mission': [37.7825, -122.4079],
-  'Broadway & Columbus': [37.7980, -122.4070],
-};
 
 /// Builds and sends `live_traffic` records as this device's atSign.
 class TrafficReporter {

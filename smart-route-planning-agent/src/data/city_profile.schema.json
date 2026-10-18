@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "city_profile.schema.json",
+  "title": "Smart Route city profile",
+  "description": "The geography of one deployment. Lives at <SMARTROUTE_DATA_DIR>/city_profile.json beside routes/ and csv/. Loaded and validated by smart-route-planning-agent/src/city_profile.py.",
+  "type": "object",
+  "required": ["locations"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schema_version": { "const": 1, "default": 1 },
+    "name": { "type": "string", "description": "Display name of the city or region." },
+    "locations": {
+      "type": "array",
+      "minItems": 2,
+      "description": "Places a trip can start or end. Each mirrors the first or last <wpt> of the GPX routes that serve it.",
+      "items": {
+        "type": "object",
+        "required": ["name", "lat", "lon"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "description": "The GPX waypoint's <name>." },
+          "desc": { "type": "string", "description": "The GPX waypoint's <desc>. When present it is the location's label in trips, requests and dropdowns; otherwise name is." },
+          "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+          "lon": { "type": "number", "minimum": -180, "maximum": 180 }
+        }
+      }
+    },
+    "default_trip": {
+      "type": "object",
+      "description": "Trip planned until a commuter asks for another. Each end is a location's name or desc. Defaults to the first and last locations.",
+      "properties": {
+        "source": { "type": "string" },
+        "destination": { "type": "string" }
+      }
+    },
+    "ignored_routes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "GPX file names under routes/ the planner never offers."
+    },
+    "route_labels": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "default": {},
+      "description": "Human-readable route names keyed by GPX file name (the route id)."
+    },
+    "map": {
+      "type": "object",
+      "properties": {
+        "centre": { "$ref": "#/$defs/point", "description": "Where maps open with no route to fit. Defaults to the mean of the locations." },
+        "zoom": { "type": "integer", "minimum": 1, "maximum": 20, "default": 10 }
+      }
+    },
+    "intersections": {
+      "type": "object",
+      "default": {},
+      "description": "Intersection publishers keyed by atSign role (as in config/ee_atsigns.json). Coordinates must be copied exactly from a <trkpt> of the route they should affect.",
+      "additionalProperties": { "$ref": "#/$defs/namedPoint" }
+    },
+    "report_points": {
+      "type": "array",
+      "default": [],
+      "description": "Extra known-good report locations (exact trackpoints) offered by the intersection app and CLI tools, ahead of the intersections.",
+      "items": { "$ref": "#/$defs/namedPoint" }
+    },
+    "avg_speed_kmh": { "type": "number", "exclusiveMinimum": 0, "default": 80, "description": "Average speed for travel-time estimates." },
+    "attribution": { "type": "string", "default": "", "description": "Credit for the route and map data, e.g. the OpenStreetMap ODbL notice." }
+  },
+  "$defs": {
+    "point": {
+      "type": "object",
+      "required": ["lat", "lon"],
+      "properties": {
+        "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+        "lon": { "type": "number", "minimum": -180, "maximum": 180 }
+      }
+    },
+    "namedPoint": {
+      "type": "object",
+      "required": ["name", "lat", "lon"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+        "lon": { "type": "number", "minimum": -180, "maximum": 180 }
+      }
+    }
+  }
+}
